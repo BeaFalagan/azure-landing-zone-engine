@@ -53,7 +53,9 @@ Se hace una vez, después del primer apply. No hay ningún secreto que guardar: 
    - *Require branches to be up to date before merging*, para que dos PR a la vez no se queden con el mismo rango de IP o la misma suscripción;
    - excepción (*bypass*) solo para el equipo de plataforma, que la usa para fusionar las bajas de proyectos.
 4. **Regla de tags para `engine/v*`**: bloquear *update* y *deletion*. Una versión publicada no se mueve ni se borra; los tags los crea el workflow `engine-release`.
-5. **Actions** (Settings → Actions → General): permisos por defecto del `GITHUB_TOKEN` en *Read*. Cada workflow pide solo los que necesita.
+5. **Actions** (Settings → Actions → General):
+   - permisos por defecto del `GITHUB_TOKEN` en *Read*. Cada workflow pide solo los que necesita;
+   - si el repositorio es público, *Require approval for all external contributors* en los workflows de forks. Las PR desde forks se validan pero no se planifican: no pueden usar la identidad del pipeline y `projects-pr` las rechaza si cambian `projects/`.
 6. **CODEOWNERS**: añade en [.github/CODEOWNERS](../.github/CODEOWNERS) una línea por unidad de negocio (`/projects/<bu>/ @org/<equipo>`).
 
 Con `gh` y el output en JSON:

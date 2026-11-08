@@ -44,6 +44,15 @@ jobs:
         id: detect
         run: python3 scripts/ci/changed_projects.py --mode pr --base HEAD^1 --head HEAD --report "$REPORT"
 
+      # Pull requests from forks get no OIDC token, no repository variables and a read-only token,
+      # so they can be validated but never planned or commented. Project data changes must come from
+      # a branch of this repository.
+      - name: Project changes need a branch of this repository
+        if: steps.detect.outputs.count != '0' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::error::Project files cannot be changed from a fork: the plan needs the pipeline identity, which forks cannot use. Push a branch to this repository instead."
+          exit 1
+
       - name: Plain YAML and platform schema
         run: |
           mapfile -t files < <(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'projects/*.yaml')
@@ -64,7 +73,7 @@ jobs:
         run: python3 scripts/check_cross_project.py --report "$REPORT"
 
       - name: Comment problems on the pull request
-        if: always()
+        if: always() && github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           JOB_STATUS: ${{ job.status }}

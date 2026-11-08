@@ -2,6 +2,9 @@
 
 Cada equipo describe su proyecto de Azure en **un fichero YAML por entorno**. Un motor Terraform versionado lo convierte en infraestructura: resource group, grupos de Entra ID con sus roles, red conectada al hub y monitorización central.
 
+> [!NOTE]
+> Este repositorio es público y solo contiene datos ficticios (IDs `1111…`, correos `example.com`). Para usarlo de verdad, haz una copia **privada**: los YAML de `projects/` y los planes que se comentan en las PR muestran suscripciones, rangos de IP y correos de tu organización.
+
 No hace falta saber Terraform ni tener credenciales de Azure. El único camino es **YAML → pull request → revisión → despliegue**, y el pipeline se autentica por OIDC, sin secretos.
 
 ## Cómo funciona
@@ -91,3 +94,7 @@ scripts/plan-examples.sh     # plan simulado de todos los ejemplos
 ```
 
 Nada de esto toca Azure: los tests usan providers simulados. Solo el pipeline despliega. La única excepción es el bootstrap inicial, que se ejecuta a mano una vez ([bootstrap/README.md](bootstrap/README.md)).
+
+## Licencia
+
+[MIT](LICENSE).
