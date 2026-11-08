@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/BeaFalagan/terraform-test/engine/schema/platform.schema.json",
+  "$id": "https://github.com/BeaFalagan/azure-landing-zone-engine/engine/schema/platform.schema.json",
   "title": "Platform references",
   "description": "Shared platform resources referenced by every project (projects/_platform/platform.yaml). Owned by the platform team; the engine only reads it.",
   "type": "object",

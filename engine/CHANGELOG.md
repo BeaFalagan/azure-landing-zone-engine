@@ -12,6 +12,9 @@ Política de versiones, deprecaciones y cambios incompatibles: [ADR-0003](../doc
 
 ## [Sin publicar]
 
+### Cambiado
+- El repositorio pasa a llamarse `azure-landing-zone-engine`: se actualiza el `$id` de los esquemas JSON.
+
 ## [1.0.0] - 2026-11-08
 
 Primera versión.

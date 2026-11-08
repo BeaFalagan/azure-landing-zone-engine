@@ -2,7 +2,7 @@
 subscription_id                   = "00000000-0000-0000-0000-000000000000"
 organization                      = "contoso"
 location                          = "westeurope"
-github_repository                 = "BeaFalagan/terraform-test"
+github_repository                 = "BeaFalagan/azure-landing-zone-engine"
 environments                      = ["dev", "pre", "pro"]
 landing_zones_management_group_id = "contoso-landingzones"
 

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/BeaFalagan/terraform-test/engine/schema/project.schema.json",
+  "$id": "https://github.com/BeaFalagan/azure-landing-zone-engine/engine/schema/project.schema.json",
   "title": "Landing zone project",
   "description": "One file per project and environment, stored at projects/<business_unit>/<project>/<environment>.yaml. Closed lists (regions, roles, delegations...) come from engine/catalog/catalog.yaml.",
   "type": "object",
