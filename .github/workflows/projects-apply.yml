@@ -1,0 +1,150 @@
+# Merge to main: for each affected project file, plan with the read-only identity and show the plan
+# in the run summary, then wait for approval in the GitHub environment lz-<env> and apply with the
+# apply identity. The apply job plans again and refuses to apply if the plan differs from the one
+# shown for approval. Deleted project files are never destroyed (see changed_projects.py).
+name: projects-apply
+
+on:
+  push:
+    branches: [main]
+    paths: ["projects/**"]
+  workflow_dispatch:
+    inputs:
+      project_file:
+        description: Project file to plan and apply again (projects/<bu>/<project>/<env>.yaml)
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  ARM_USE_OIDC: "true"
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  TFSTATE_SUBSCRIPTION: ${{ vars.TFSTATE_SUBSCRIPTION }}
+  TFSTATE_RESOURCE_GROUP: ${{ vars.TFSTATE_RESOURCE_GROUP }}
+  TFSTATE_ACCOUNT: ${{ vars.TFSTATE_ACCOUNT }}
+  TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  detect:
+    name: detect changes
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      count: ${{ steps.detect.outputs.count }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Install Python packages
+        run: pip install --quiet -r scripts/ci/requirements.txt
+
+      - name: Changed project files
+        id: detect
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          FILE: ${{ inputs.project_file }}
+        run: |
+          if [[ "${EVENT}" == "workflow_dispatch" ]]; then
+            python3 scripts/ci/changed_projects.py --mode dispatch --files "${FILE}"
+          else
+            python3 scripts/ci/changed_projects.py --mode push --base "${BEFORE}" --head HEAD
+          fi
+
+  plan:
+    name: plan ${{ matrix.name }}
+    needs: detect
+    if: needs.detect.outputs.count != '0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    env:
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID_PLAN }}
+      LZ_LOCK: "false"
+      TF_VAR_register_resource_providers: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: ./.github/actions/run-engine
+        with:
+          mode: plan
+          file: ${{ matrix.file }}
+
+      - name: Job summary
+        if: always()
+        run: cat "$RUNNER_TEMP/lz/report.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: plan-${{ matrix.id }}
+          path: |
+            ${{ runner.temp }}/lz/plan.txt
+            ${{ runner.temp }}/lz/changes.json
+          retention-days: 30
+
+  apply:
+    name: apply ${{ matrix.name }}
+    # Only when every plan of this run succeeded: nobody is asked to approve a failed plan.
+    # Fix the file and merge again, or re-run a single file with workflow_dispatch.
+    needs: [detect, plan]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    # Required reviewers are configured on the environment; the apply identity only trusts these.
+    environment: lz-${{ matrix.environment }}
+    # One apply at a time per project file; later runs wait instead of being cancelled.
+    concurrency:
+      group: apply-${{ matrix.id }}
+      cancel-in-progress: false
+    env:
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID_APPLY }}
+      LZ_LOCK: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: plan-${{ matrix.id }}
+          path: ${{ runner.temp }}/approved
+
+      - name: Use the approved plan as reference
+        run: echo "LZ_APPROVED_CHANGES=${RUNNER_TEMP}/approved/changes.json" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/run-engine
+        with:
+          mode: apply
+          file: ${{ matrix.file }}
+
+      - name: Job summary
+        if: always()
+        run: cat "$RUNNER_TEMP/lz/report.md" >> "$GITHUB_STEP_SUMMARY" || true

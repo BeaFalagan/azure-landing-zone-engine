@@ -1,0 +1,8 @@
+# checkov 3.4.3. Skips are declared inline (#checkov:skip=<id>:<reason>) next to the resource,
+# never globally, so every exception carries its justification.
+compact: true
+framework:
+  - terraform
+quiet: true
+skip-path:
+  - .terraform

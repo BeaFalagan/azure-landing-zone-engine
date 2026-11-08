@@ -1,0 +1,391 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/BeaFalagan/terraform-test/engine/schema/project.schema.json",
+  "title": "Landing zone project",
+  "description": "One file per project and environment, stored at projects/<business_unit>/<project>/<environment>.yaml. Closed lists (regions, roles, delegations...) come from engine/catalog/catalog.yaml.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "engine_version",
+    "business_unit",
+    "project",
+    "environment",
+    "subscription_id",
+    "location",
+    "tags"
+  ],
+  "properties": {
+    "engine_version": {
+      "title": "Engine version",
+      "description": "Exact engine version (SemVer) used to deploy this file. The pipeline runs the engine from tag engine/v<engine_version>.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "examples": ["1.0.0"]
+    },
+    "business_unit": {
+      "title": "Business unit",
+      "description": "Short code of the business unit. Must match the first folder of the file path. Lowercase letters and digits, 2-6 characters, starting with a letter.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{1,5}$",
+      "examples": ["pga"]
+    },
+    "project": {
+      "title": "Project",
+      "description": "Short project name. Must match the second folder of the file path. Lowercase letters and digits, 2-14 characters, starting with a letter.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{1,13}$",
+      "examples": ["billing"]
+    },
+    "environment": {
+      "title": "Environment",
+      "description": "Environment. Must match the file name (<environment>.yaml).",
+      "type": "string",
+      "enum": ["dev", "pre", "pro"],
+      "enumNames": ["Development", "Pre-production", "Production"],
+      "examples": ["dev"]
+    },
+    "subscription_id": {
+      "title": "Subscription ID",
+      "description": "Azure subscription (GUID) dedicated to this project and environment. Requested from the platform team.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "examples": ["00000000-0000-0000-0000-000000000000"]
+    },
+    "location": {
+      "title": "Region",
+      "description": "Azure region for every resource of the project.",
+      "type": "string",
+      "enum": ["westeurope", "northeurope", "spaincentral"],
+      "enumNames": ["West Europe", "North Europe", "Spain Central"],
+      "default": "westeurope",
+      "examples": ["westeurope"]
+    },
+    "tags": {
+      "title": "Business tags",
+      "description": "Mandatory business tags, applied to every resource. Extra tags are allowed (lowercase keys). The engine adds business_unit, project, environment, managed_by, engine_version and source; those keys cannot be set here.",
+      "type": "object",
+      "required": ["cost_center", "business_owner", "technical_owner"],
+      "properties": {
+        "cost_center": {
+          "title": "Cost center",
+          "description": "Cost center charged for the project.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S",
+          "examples": ["ES0009"]
+        },
+        "business_owner": {
+          "title": "Business owner",
+          "description": "Email of the person accountable for the project.",
+          "type": "string",
+          "format": "email",
+          "examples": ["owner@example.com"]
+        },
+        "technical_owner": {
+          "title": "Technical owner",
+          "description": "Email of the technical contact (person or team mailbox).",
+          "type": "string",
+          "format": "email",
+          "examples": ["team@example.com"]
+        }
+      },
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,62}$",
+        "not": {
+          "enum": ["business_unit", "project", "environment", "managed_by", "engine_version", "source"]
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "\\S"
+      }
+    },
+    "access": {
+      "title": "Access",
+      "description": "Entra ID groups created by the engine. Each entry creates the group sg-az-<business_unit>-<project>-<environment>-<name> and assigns its roles on the project resource group.",
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/definitions/access_entry" }
+    },
+    "network": {
+      "title": "Network",
+      "description": "Optional. Without this block the engine creates no network.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address_space", "subnets"],
+      "properties": {
+        "address_space": {
+          "title": "Address space",
+          "description": "CIDR ranges of the VNet, assigned by the platform team. They must not overlap with any other project or the hub.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/cidr" },
+          "examples": [["10.48.48.0/20"]]
+        },
+        "peer_to_hub": {
+          "title": "Peer to hub",
+          "description": "Connect the VNet to the hub of the same environment and region (declared in projects/_platform/platform.yaml).",
+          "type": "boolean",
+          "default": true
+        },
+        "dns_servers": {
+          "title": "DNS servers",
+          "description": "Custom DNS servers. Leave empty to use the hub DNS servers when peered, or Azure DNS otherwise.",
+          "type": "array",
+          "default": [],
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/ipv4" }
+        },
+        "subnets": {
+          "title": "Subnets",
+          "description": "Subnets of the VNet. Each one gets its own NSG.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/subnet" }
+        }
+      }
+    },
+    "monitoring": {
+      "title": "Monitoring",
+      "description": "Send the subscription Activity Log and resource diagnostics to the central Log Analytics workspace.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "log_analytics": {
+          "title": "Central Log Analytics",
+          "description": "Enable diagnostic settings towards the central workspace. Disable only in sandbox subscriptions.",
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "overrides": {
+      "title": "Name overrides",
+      "description": "Exceptional: replace a generated name, e.g. to adopt a pre-existing resource. Requires a justification reviewed by the platform team.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "resource_group_name": {
+          "title": "Resource group name",
+          "type": "string",
+          "pattern": "^[-a-zA-Z0-9._()]{1,89}[-a-zA-Z0-9_()]$"
+        },
+        "virtual_network_name": {
+          "title": "Virtual network name",
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][-a-zA-Z0-9._]{0,62}[a-zA-Z0-9_]$"
+        },
+        "justification": {
+          "title": "Justification",
+          "description": "Why the generated name cannot be used.",
+          "type": "string",
+          "minLength": 20
+        }
+      },
+      "dependencies": {
+        "resource_group_name": ["justification"],
+        "virtual_network_name": ["justification"]
+      }
+    }
+  },
+  "definitions": {
+    "cidr": {
+      "title": "CIDR",
+      "description": "IPv4 range in CIDR notation.",
+      "type": "string",
+      "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/(3[0-2]|[12]?[0-9])$",
+      "examples": ["10.48.48.0/24"]
+    },
+    "ipv4": {
+      "title": "IPv4 address",
+      "type": "string",
+      "format": "ipv4",
+      "examples": ["10.0.1.4"]
+    },
+    "address": {
+      "title": "Address",
+      "description": "An alias from the catalog or a CIDR.",
+      "anyOf": [
+        {
+          "title": "Alias",
+          "type": "string",
+          "enum": ["any", "azure-lb", "hub", "internet", "subnet", "vnet"],
+          "enumNames": [
+            "Any address",
+            "Azure Load Balancer probes",
+            "Hub network",
+            "Internet",
+            "This subnet",
+            "Virtual network and peered networks"
+          ]
+        },
+        { "$ref": "#/definitions/cidr" }
+      ]
+    },
+    "access_entry": {
+      "title": "Access group",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "roles"],
+      "properties": {
+        "name": {
+          "title": "Group suffix",
+          "description": "Suffix of the Entra ID group name. Unique within the file.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,23}$",
+          "examples": ["readers", "developers"]
+        },
+        "description": {
+          "title": "Description",
+          "type": "string",
+          "maxLength": 200
+        },
+        "roles": {
+          "title": "Roles",
+          "description": "Built-in roles granted on the project resource group.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "Reader",
+              "Contributor",
+              "Monitoring Reader",
+              "Monitoring Contributor",
+              "Storage Blob Data Reader",
+              "Storage Blob Data Contributor",
+              "Key Vault Reader",
+              "Key Vault Secrets User"
+            ]
+          },
+          "examples": [["Reader"]]
+        },
+        "members": {
+          "title": "Members",
+          "description": "User principal names (UPN) added to the group. Optional: membership can also be managed outside the engine.",
+          "type": "array",
+          "default": [],
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "email" },
+          "examples": [["ana@example.com"]]
+        }
+      }
+    },
+    "subnet": {
+      "title": "Subnet",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "prefix"],
+      "properties": {
+        "name": {
+          "title": "Name",
+          "description": "Subnet name without prefix (the engine adds snet-). Unique within the file.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,30}[a-z0-9]$",
+          "examples": ["app"]
+        },
+        "prefix": {
+          "$ref": "#/definitions/cidr"
+        },
+        "service_endpoints": {
+          "title": "Service endpoints",
+          "type": "array",
+          "default": [],
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "Microsoft.AzureCosmosDB",
+              "Microsoft.ContainerRegistry",
+              "Microsoft.EventHub",
+              "Microsoft.KeyVault",
+              "Microsoft.ServiceBus",
+              "Microsoft.Sql",
+              "Microsoft.Storage",
+              "Microsoft.Web"
+            ]
+          }
+        },
+        "delegation": {
+          "title": "Delegation",
+          "description": "Delegate the subnet to an Azure service (catalog alias).",
+          "type": "string",
+          "enum": ["app-service", "container-apps", "container-instances", "mysql", "postgresql"]
+        },
+        "nsg_rules": {
+          "title": "NSG rules",
+          "description": "Rules of the subnet NSG. Priorities are assigned automatically in list order (100, 110, ...) unless set explicitly.",
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/definitions/nsg_rule" }
+        }
+      }
+    },
+    "nsg_rule": {
+      "title": "NSG rule",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "direction", "access", "protocol", "source"],
+      "properties": {
+        "name": {
+          "title": "Name",
+          "description": "Unique within the subnet.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,62}$",
+          "examples": ["allow-https-from-hub"]
+        },
+        "direction": {
+          "title": "Direction",
+          "type": "string",
+          "enum": ["inbound", "outbound"]
+        },
+        "access": {
+          "title": "Access",
+          "type": "string",
+          "enum": ["allow", "deny"]
+        },
+        "protocol": {
+          "title": "Protocol",
+          "type": "string",
+          "enum": ["tcp", "udp", "icmp", "any"]
+        },
+        "source": {
+          "title": "Source",
+          "$ref": "#/definitions/address"
+        },
+        "destination": {
+          "title": "Destination",
+          "description": "Defaults to this subnet.",
+          "$ref": "#/definitions/address",
+          "default": "subnet"
+        },
+        "ports": {
+          "title": "Destination ports",
+          "description": "Ports or ranges, as text. Use \"*\" for all.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "default": ["*"],
+          "items": {
+            "type": "string",
+            "pattern": "^(\\*|[0-9]{1,5}(-[0-9]{1,5})?)$"
+          },
+          "examples": [["443"], ["8080-8090"]]
+        },
+        "priority": {
+          "title": "Priority",
+          "description": "Only to force a value. Lower number = evaluated first.",
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 4096
+        }
+      }
+    }
+  }
+}

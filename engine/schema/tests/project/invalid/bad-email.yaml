@@ -1,0 +1,11 @@
+# expect: is not a 'email'
+engine_version: "1.0.0"
+business_unit: pga
+project: billing
+environment: dev
+subscription_id: "00000000-0000-0000-0000-000000000000"
+location: westeurope
+tags:
+  cost_center: "ES0009"
+  business_owner: Ana Owner
+  technical_owner: team@example.com

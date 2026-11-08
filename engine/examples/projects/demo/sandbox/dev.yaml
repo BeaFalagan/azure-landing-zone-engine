@@ -1,0 +1,28 @@
+# Isolated sandbox: own network without hub peering and without central monitoring.
+# yaml-language-server: $schema=../../../../schema/project.schema.json
+
+engine_version: "1.0.0"
+business_unit: demo
+project: sandbox
+environment: dev
+subscription_id: "00000000-0000-0000-0000-000000000003"
+location: northeurope
+
+tags:
+  cost_center: "LAB001"
+  business_owner: owner@example.com
+  technical_owner: lab@example.com
+
+access:
+  - name: owners
+    roles: [Contributor]
+
+network:
+  address_space: ["192.168.0.0/24"]
+  peer_to_hub: false
+  subnets:
+    - name: workload
+      prefix: "192.168.0.0/26"
+
+monitoring:
+  log_analytics: false

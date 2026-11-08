@@ -1,0 +1,54 @@
+# Complete project: access groups, network peered to the hub, PostgreSQL subnet, NSG rules.
+# yaml-language-server: $schema=../../../../schema/project.schema.json
+
+engine_version: "1.0.0"
+business_unit: demo
+project: webapp
+environment: pro
+subscription_id: "00000000-0000-0000-0000-000000000002"
+location: westeurope
+
+tags:
+  cost_center: "ES0009"
+  business_owner: owner@example.com
+  technical_owner: webapp-team@example.com
+  data_classification: confidential
+
+access:
+  - name: readers
+    roles: [Reader]
+  - name: developers
+    description: WebApp development team
+    roles: [Contributor, Key Vault Secrets User]
+    members: [ana@example.com, luis@example.com]
+
+network:
+  address_space: ["10.48.48.0/20"]
+  subnets:
+    - name: app
+      prefix: "10.48.48.0/24"
+      service_endpoints: [Microsoft.Storage, Microsoft.KeyVault]
+      delegation: app-service
+      nsg_rules:
+        - name: allow-https-from-hub
+          direction: inbound
+          access: allow
+          protocol: tcp
+          source: hub
+          ports: ["443"]
+    - name: db
+      prefix: "10.48.49.0/24"
+      delegation: postgresql
+      nsg_rules:
+        - name: allow-pg-from-app
+          direction: inbound
+          access: allow
+          protocol: tcp
+          source: "10.48.48.0/24"
+          ports: ["5432"]
+        - name: deny-vnet-inbound
+          direction: inbound
+          access: deny
+          protocol: any
+          source: vnet
+          priority: 4000

@@ -1,0 +1,7 @@
+# expect: does not match
+log_analytics_workspace_id: log-mgmt-pro-weu
+hubs:
+  - environment: dev
+    location: westeurope
+    virtual_network_id: /subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/vnet-hub
+    address_space: ["10.0.0.0/22"]

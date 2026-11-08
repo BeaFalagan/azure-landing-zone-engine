@@ -1,0 +1,46 @@
+name: Run engine
+description: >-
+  Check out the engine version a project file declares, validate the file with that version's
+  schema and run Terraform (scripts/ci/run-engine.sh). The report is left in runner.temp/lz.
+  Expects the repository checked out with tags (fetch-depth 0) and the TFSTATE_* and ARM_*
+  variables in the job environment.
+
+inputs:
+  mode:
+    description: plan or apply
+    required: true
+  file:
+    description: Project file (projects/<bu>/<project>/<env>.yaml)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      with:
+        python-version: "3.13"
+
+    - name: Install Python packages
+      shell: bash
+      run: pip install --quiet -r scripts/ci/requirements.txt
+
+    - name: Check out engine and validate schema
+      id: prepare
+      shell: bash
+      env:
+        LZ_OUT: ${{ runner.temp }}/lz
+        FILE: ${{ inputs.file }}
+      run: scripts/ci/run-engine.sh prepare "$FILE"
+
+    - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      with:
+        terraform_version: ${{ steps.prepare.outputs.terraform_version }}
+        terraform_wrapper: false
+
+    - name: Terraform ${{ inputs.mode }}
+      shell: bash
+      env:
+        LZ_OUT: ${{ runner.temp }}/lz
+        FILE: ${{ inputs.file }}
+        MODE: ${{ inputs.mode }}
+      run: scripts/ci/run-engine.sh "$MODE" "$FILE"

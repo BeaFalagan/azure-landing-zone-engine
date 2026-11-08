@@ -1,0 +1,188 @@
+# Pull requests that touch the engine or the tooling: static checks (the same pre-commit hooks as
+# local development), terraform test, mocked plans of every example and the release rules.
+# Nothing reaches Azure. Runs on every pull request so that `result` can be a required check.
+name: engine-pr
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: engine-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
+
+jobs:
+  changes:
+    name: detect changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      engine: ${{ steps.changes.outputs.engine }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # HEAD is the merge commit GitHub builds for the pull request; HEAD^1 is the base branch.
+      - name: Engine or tooling changed?
+        id: changes
+        run: |
+          pattern='^(engine/|bootstrap/|scripts/|\.github/|\.pre-commit-config\.yaml$|\.tflint\.hcl$|\.checkov\.yaml$|\.terraform-docs\.yml$|\.terraform-version$)'
+          if git diff --name-only HEAD^1 HEAD | grep -qE "${pattern}"; then
+            echo "engine=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "engine=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  static:
+    name: fmt, validate, tflint, docs, checkov, schemas
+    needs: changes
+    if: needs.changes.outputs.engine == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # project files pinned to older engine versions are validated with the schema of their tag
+          persist-credentials: false
+
+      - id: versions
+        run: echo "terraform=$(tr -d '[:space:]' < .terraform-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform }}
+          terraform_wrapper: false
+
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: v0.65.0
+
+      - name: Install terraform-docs 0.24.0
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sSfLO https://github.com/terraform-docs/terraform-docs/releases/download/v0.24.0/terraform-docs-v0.24.0-linux-amd64.tar.gz
+          echo "9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3  terraform-docs-v0.24.0-linux-amd64.tar.gz" | sha256sum --check
+          tar -xzf terraform-docs-v0.24.0-linux-amd64.tar.gz terraform-docs
+          sudo install terraform-docs /usr/local/bin/
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Install pre-commit and checkov
+        run: pip install --quiet -r scripts/ci/requirements-engine.txt
+
+      - name: pre-commit (all files)
+        env:
+          SKIP: terraform-test # own job below
+          GITHUB_TOKEN: ${{ github.token }} # tflint --init downloads the azurerm ruleset
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          pre-commit run --all-files --show-diff-on-failure --color always
+
+  test:
+    name: terraform test
+    needs: changes
+    if: needs.changes.outputs.engine == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: versions
+        run: echo "terraform=$(tr -d '[:space:]' < .terraform-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform }}
+          terraform_wrapper: false
+
+      - name: terraform test (mocked providers)
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          scripts/test-all.sh
+
+  examples:
+    name: plan examples
+    needs: changes
+    if: needs.changes.outputs.engine == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: versions
+        run: echo "terraform=$(tr -d '[:space:]' < .terraform-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform }}
+          terraform_wrapper: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Install Python packages
+        run: pip install --quiet -r scripts/ci/requirements.txt
+
+      - name: Plan every example (mocked providers)
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          scripts/plan-examples.sh
+
+      - name: Cross-project checks on the examples
+        run: python3 scripts/check_cross_project.py --projects-dir engine/examples/projects --platform engine/examples/platform.yaml
+
+  release-rules:
+    name: version and changelog
+    needs: changes
+    if: needs.changes.outputs.engine == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # needs the published engine/v* tags
+          persist-credentials: false
+
+      - name: engine/VERSION and engine/CHANGELOG.md
+        run: python3 scripts/ci/check_release.py check --base HEAD^1
+
+  # Single required status check for branch protection: fails if any job above failed.
+  result:
+    name: result
+    needs: [changes, static, test, examples, release-rules]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check job results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: ${RESULTS}"
+          [[ ! " ${RESULTS} " =~ " failure " && ! " ${RESULTS} " =~ " cancelled " ]]

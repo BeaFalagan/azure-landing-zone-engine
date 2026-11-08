@@ -1,0 +1,7 @@
+# expect: 'tags' is a required property
+engine_version: "1.0.0"
+business_unit: pga
+project: billing
+environment: dev
+subscription_id: "00000000-0000-0000-0000-000000000000"
+location: westeurope

@@ -1,0 +1,23 @@
+# repeated access and subnet names
+engine_version: "1.0.0"
+business_unit: demo
+project: duplicates
+environment: dev
+subscription_id: "00000000-0000-0000-0000-000000000009"
+location: westeurope
+tags:
+  cost_center: "ES0009"
+  business_owner: owner@example.com
+  technical_owner: team@example.com
+access:
+  - name: readers
+    roles: [Reader]
+  - name: readers
+    roles: [Contributor]
+network:
+  address_space: ["10.61.0.0/24"]
+  subnets:
+    - name: app
+      prefix: "10.61.0.0/26"
+    - name: app
+      prefix: "10.61.0.64/26"

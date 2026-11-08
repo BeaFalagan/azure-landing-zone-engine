@@ -1,0 +1,3 @@
+# Extra tools for the engine pipeline; pre-commit installs the hook environments itself.
+pre-commit==4.7.0
+checkov==3.4.3

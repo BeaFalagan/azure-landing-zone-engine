@@ -1,0 +1,41 @@
+# engine/VERSION changed on main: create the tag engine/vX.Y.Z and its GitHub release, with the
+# notes from engine/CHANGELOG.md. Projects use the new version only when their YAML pins it.
+name: engine-release
+
+on:
+  push:
+    branches: [main]
+    paths: [engine/VERSION]
+
+permissions: {}
+
+concurrency:
+  group: engine-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: tag and release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # needs the published engine/v* tags
+          persist-credentials: false
+
+      - name: Check version and changelog
+        id: version
+        run: python3 scripts/ci/check_release.py release --notes "$RUNNER_TEMP/notes.md"
+
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" \
+            --title "Engine ${VERSION}" --notes-file "$RUNNER_TEMP/notes.md"
+          echo "Released ${TAG} at ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"

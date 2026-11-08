@@ -1,0 +1,16 @@
+# peered network, but platform.yaml has no hub for pre/northeurope
+engine_version: "1.0.0"
+business_unit: demo
+project: nohub
+environment: pre
+subscription_id: "00000000-0000-0000-0000-000000000009"
+location: northeurope
+tags:
+  cost_center: "ES0009"
+  business_owner: owner@example.com
+  technical_owner: team@example.com
+network:
+  address_space: ["10.60.0.0/24"]
+  subnets:
+    - name: app
+      prefix: "10.60.0.0/26"

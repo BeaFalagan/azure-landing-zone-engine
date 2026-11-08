@@ -1,0 +1,33 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+# Modules and their examples do not pin providers: only roots (bootstrap, engine/root) commit a lock file
+engine/modules/**/.terraform.lock.hcl
+engine/root/.examples-test/
+# Engine version checked out by the CI pipelines (git worktree of the tag engine/vX.Y.Z)
+.engine/
+*.tfplan
+tfplan*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+# Local variable files may contain tenant data; examples are committed as *.tfvars.example
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Tooling
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+# Claude Code local settings
+.claude/settings.local.json

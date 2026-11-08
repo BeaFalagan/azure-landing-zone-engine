@@ -1,0 +1,81 @@
+# Engine catalog: the single source of truth for every closed list the YAML can use.
+# The JSON Schema enums must match these keys (checked by scripts/check_schema_catalog.py).
+# Adding an entry here is a MINOR engine change; removing one is MAJOR (see docs/adr/0003).
+
+# Azure regions allowed for projects, with the short code used in resource names.
+regions:
+  westeurope:
+    short: weu
+  northeurope:
+    short: neu
+  spaincentral:
+    short: spc
+
+environments:
+  - dev
+  - pre
+  - pro
+
+# Roles a project team may receive through `access`. Owner, User Access Administrator and
+# Role Based Access Control Administrator are excluded on purpose: teams cannot grant access.
+# Values are the built-in role definition GUIDs; the bootstrap uses them to build the ABAC
+# condition that limits what the pipeline identity can assign.
+roles:
+  Reader: acdd72a7-3385-48ef-bd42-f606fba81ae7
+  Contributor: b24988ac-6180-42a0-ab88-20f7382dd24c
+  Monitoring Reader: 43d0d8ad-25c7-4714-9337-8ba259a9fe05
+  Monitoring Contributor: 749f88d5-cbae-40b8-bcfc-e573ddc772fa
+  Storage Blob Data Reader: 2a2b9908-6ea1-4ae2-8e65-a410df84e7d1
+  Storage Blob Data Contributor: ba92f5b4-2d11-453d-a403-e96b0029c9fe
+  Key Vault Reader: 21090545-7ca7-4776-b22c-e363652d74d2
+  Key Vault Secrets User: 4633458b-17de-408a-b874-0445c86b69e6
+
+# Subnet delegation aliases -> Azure service delegation.
+delegations:
+  app-service:
+    service: Microsoft.Web/serverFarms
+    actions:
+      - Microsoft.Network/virtualNetworks/subnets/action
+  container-apps:
+    service: Microsoft.App/environments
+    actions:
+      - Microsoft.Network/virtualNetworks/subnets/join/action
+  container-instances:
+    service: Microsoft.ContainerInstance/containerGroups
+    actions:
+      - Microsoft.Network/virtualNetworks/subnets/action
+  mysql:
+    service: Microsoft.DBforMySQL/flexibleServers
+    actions:
+      - Microsoft.Network/virtualNetworks/subnets/join/action
+  postgresql:
+    service: Microsoft.DBforPostgreSQL/flexibleServers
+    actions:
+      - Microsoft.Network/virtualNetworks/subnets/join/action
+
+service_endpoints:
+  - Microsoft.AzureCosmosDB
+  - Microsoft.ContainerRegistry
+  - Microsoft.EventHub
+  - Microsoft.KeyVault
+  - Microsoft.ServiceBus
+  - Microsoft.Sql
+  - Microsoft.Storage
+  - Microsoft.Web
+
+# Address aliases usable as NSG rule source/destination (a CIDR is also accepted).
+# Values starting with "@" are resolved by the engine: @subnet = the subnet's own prefix,
+# @hub = the hub address space declared in projects/_platform/platform.yaml.
+address_aliases:
+  any: "*"
+  azure-lb: AzureLoadBalancer
+  hub: "@hub"
+  internet: Internet
+  subnet: "@subnet"
+  vnet: VirtualNetwork
+
+# Resource providers registered explicitly in every project subscription
+# (azurerm 5.x registers none by default).
+resource_providers:
+  - Microsoft.Insights
+  - Microsoft.Network

@@ -1,0 +1,11 @@
+# Last matching rule wins.
+# Engine, bootstrap, pipeline and platform data: platform team.
+*                           @BeaFalagan
+/engine/                    @BeaFalagan
+/bootstrap/                 @BeaFalagan
+/.github/                   @BeaFalagan
+/scripts/                   @BeaFalagan
+/projects/_platform/        @BeaFalagan
+
+# Project data: each business unit reviews its own folder. Add one line per BU, e.g.:
+# /projects/<business_unit>/  @<org>/<bu-team>

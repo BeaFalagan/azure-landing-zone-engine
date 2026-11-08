@@ -1,0 +1,159 @@
+# Pull requests that touch projects/: validate, plan only the affected project files and comment
+# the plan on the pull request. Runs on every pull request (without a paths filter) so that its
+# `result` job can be a required status check; it finishes in seconds when no project changes.
+name: projects-pr
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: projects-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: detect changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      count: ${{ steps.detect.outputs.count }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Install Python packages
+        run: |
+          pip install --quiet -r scripts/ci/requirements.txt
+          echo "REPORT=${RUNNER_TEMP}/detect.md" >> "$GITHUB_ENV"
+
+      # HEAD is the merge commit GitHub builds for the pull request; HEAD^1 is the base branch.
+      - name: Changed project files
+        id: detect
+        run: python3 scripts/ci/changed_projects.py --mode pr --base HEAD^1 --head HEAD --report "$REPORT"
+
+      - name: Plain YAML and platform schema
+        run: |
+          mapfile -t files < <(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'projects/*.yaml')
+          [[ ${#files[@]} -eq 0 ]] && exit 0
+          status=0
+          python3 scripts/check_plain_yaml.py "${files[@]}" 2> errors.txt || status=1
+          if printf '%s\n' "${files[@]}" | grep -qx 'projects/_platform/platform.yaml'; then
+            python3 scripts/validate_project.py --schema engine/schema/platform.schema.json \
+              projects/_platform/platform.yaml 2>> errors.txt || status=1
+          fi
+          cat errors.txt >&2
+          if [[ ${status} -ne 0 ]]; then
+            { echo "#### Invalid YAML"; echo; sed 's/^/- /' errors.txt; echo; } >> "$REPORT"
+          fi
+          exit "${status}"
+
+      - name: Shared subscriptions and overlapping address spaces
+        run: python3 scripts/check_cross_project.py --report "$REPORT"
+
+      - name: Comment problems on the pull request
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const fs = require('fs');
+            const file = process.env.REPORT || `${process.env.RUNNER_TEMP}/detect.md`;
+            const failed = process.env.JOB_STATUS !== 'success';
+            if (failed && !fs.existsSync(file)) fs.writeFileSync(file, 'The checks failed. See the job logs.\n');
+            if (!failed) fs.writeFileSync(file, '### ✅ Project checks passed\n');
+            else fs.writeFileSync(file, '### ❌ Project checks failed\n\n' + fs.readFileSync(file, 'utf8'));
+            // On success, only refresh a previous failure comment (no noise on clean pull requests).
+            await require('./scripts/ci/pr-comment.js')({ github, context, marker: 'detect', file, onlyIfExists: !failed });
+
+  plan:
+    name: plan ${{ matrix.name }}
+    needs: detect
+    if: needs.detect.outputs.count != '0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    env:
+      # Plan identity (read-only, trusted for pull requests). OIDC: no secrets.
+      ARM_USE_OIDC: "true"
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID_PLAN }}
+      TFSTATE_SUBSCRIPTION: ${{ vars.TFSTATE_SUBSCRIPTION }}
+      TFSTATE_RESOURCE_GROUP: ${{ vars.TFSTATE_RESOURCE_GROUP }}
+      TFSTATE_ACCOUNT: ${{ vars.TFSTATE_ACCOUNT }}
+      TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
+      TF_IN_AUTOMATION: "true"
+      # Pull request plans never lock the state (they would block applies) and never register
+      # resource providers (the plan identity is read-only).
+      LZ_LOCK: "false"
+      TF_VAR_register_resource_providers: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: ./.github/actions/run-engine
+        with:
+          mode: plan
+          file: ${{ matrix.file }}
+
+      - name: Job summary
+        if: always()
+        run: cat "$RUNNER_TEMP/lz/report.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Comment plan on the pull request
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          MARKER: plan:${{ matrix.file }}
+        with:
+          script: |
+            const file = `${process.env.RUNNER_TEMP}/lz/report.md`;
+            await require('./scripts/ci/pr-comment.js')({ github, context, marker: process.env.MARKER, file });
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: plan-${{ matrix.id }}
+          path: |
+            ${{ runner.temp }}/lz/report.md
+            ${{ runner.temp }}/lz/plan.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Single required status check for branch protection: fails if any job above failed.
+  result:
+    name: result
+    needs: [detect, plan]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check job results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: ${RESULTS}"
+          [[ ! " ${RESULTS} " =~ " failure " && ! " ${RESULTS} " =~ " cancelled " ]]

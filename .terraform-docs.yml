@@ -1,0 +1,19 @@
+formatter: markdown table
+version: ">= 0.24.0, < 1.0.0"
+
+output:
+  file: README.md
+  mode: inject
+
+sort:
+  enabled: true
+  by: required
+
+settings:
+  anchor: false
+  default: true
+  hide-empty: true
+  lockfile: false
+  required: true
+  sensitive: true
+  type: true

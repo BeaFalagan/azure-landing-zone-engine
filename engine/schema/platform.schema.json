@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/BeaFalagan/terraform-test/engine/schema/platform.schema.json",
+  "title": "Platform references",
+  "description": "Shared platform resources referenced by every project (projects/_platform/platform.yaml). Owned by the platform team; the engine only reads it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["log_analytics_workspace_id", "hubs"],
+  "properties": {
+    "log_analytics_workspace_id": {
+      "title": "Central Log Analytics workspace",
+      "description": "Resource ID of the workspace that receives Activity Logs and diagnostics.",
+      "type": "string",
+      "pattern": "^/subscriptions/[0-9a-f-]{36}/resourceGroups/[^/]+/providers/Microsoft\\.OperationalInsights/workspaces/[^/]+$"
+    },
+    "hubs": {
+      "title": "Hub networks",
+      "description": "One entry per environment and region. A project peers to the hub with its own environment and location.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/hub" }
+    }
+  },
+  "definitions": {
+    "cidr": {
+      "type": "string",
+      "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/(3[0-2]|[12]?[0-9])$"
+    },
+    "ipv4": {
+      "type": "string",
+      "format": "ipv4"
+    },
+    "hub": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "location", "virtual_network_id", "address_space"],
+      "properties": {
+        "environment": {
+          "type": "string",
+          "enum": ["dev", "pre", "pro"]
+        },
+        "location": {
+          "type": "string",
+          "enum": ["westeurope", "northeurope", "spaincentral"]
+        },
+        "virtual_network_id": {
+          "description": "Resource ID of the hub VNet.",
+          "type": "string",
+          "pattern": "^/subscriptions/[0-9a-f-]{36}/resourceGroups/[^/]+/providers/Microsoft\\.Network/virtualNetworks/[^/]+$"
+        },
+        "address_space": {
+          "description": "Hub address space. Used by the 'hub' alias in NSG rules and by the overlap checks.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/cidr" }
+        },
+        "dns_servers": {
+          "description": "DNS servers offered to peered projects (e.g. DNS Private Resolver inbound endpoint).",
+          "type": "array",
+          "default": [],
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/ipv4" }
+        },
+        "firewall_private_ip": {
+          "description": "When set, project subnets get a default route (0.0.0.0/0) to this firewall.",
+          "$ref": "#/definitions/ipv4"
+        },
+        "use_remote_gateways": {
+          "description": "Project peerings use the hub VPN/ExpressRoute gateway. Requires a gateway in the hub.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  }
+}

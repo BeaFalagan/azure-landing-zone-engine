@@ -1,0 +1,17 @@
+# expect: 'databricks' is not one of
+engine_version: "1.0.0"
+business_unit: pga
+project: billing
+environment: dev
+subscription_id: "00000000-0000-0000-0000-000000000000"
+location: westeurope
+tags:
+  cost_center: "ES0009"
+  business_owner: owner@example.com
+  technical_owner: team@example.com
+network:
+  address_space: ["10.48.48.0/20"]
+  subnets:
+    - name: app
+      prefix: "10.48.48.0/24"
+      delegation: databricks
