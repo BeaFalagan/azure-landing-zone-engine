@@ -28,6 +28,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[2]
 PLATFORM = "projects/_platform/platform.yaml"
 ZERO_SHA = "0" * 40
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git hash-object -t tree /dev/null
 
 DELETED = """`{path}` was deleted. Deleting a project file never destroys its resources: they would \
 stay in Azure without an owner, so the pipeline stops here.
@@ -53,7 +54,10 @@ def git(*args):
 def diff(base, head):
     """[(status, path)] between two commits, with renames split into delete + add."""
     if not base or base == ZERO_SHA:
-        base = f"{head}^"
+        # New branch: compare with the parent commit, or with nothing for the first commit.
+        parent = subprocess.run(["git", "-C", str(REPO), "rev-parse", "-q", "--verify", f"{head}^"],
+                                capture_output=True, text=True, check=False)
+        base = parent.stdout.strip() if parent.returncode == 0 else EMPTY_TREE
     out = git("diff", "--name-status", "--no-renames", base, head, "--", "projects/")
     return [tuple(line.split("\t", 1)) for line in out.splitlines() if line]
 
